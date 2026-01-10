@@ -4,15 +4,14 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
-use shared::data::version_meta::FileChange;
-use shared::data::version_meta_group::VersionMetaGroup;
-use shared::utility::partial_read::PartialRead;
-
+use crate::core::data::version_meta::FileChange;
+use crate::core::data::version_meta_group::VersionMetaGroup;
 use crate::utility::counted_write::CountedWrite;
+use crate::utility::partial_read::PartialRead;
 
 pub struct MetadataLocation {
     pub offset: u64,
-    pub length: u32,
+    pub length: u64,
 }
 
 /// 代表一个更新包写入器，用于生成tar格式的更新包
@@ -98,7 +97,7 @@ impl TarWriter {
 
         MetadataLocation {
             offset: metadata_offset + 512,
-            length: file_content.len() as u32,
+            length: file_content.len() as u64,
         }
     }
 }

@@ -3,7 +3,7 @@ name: Release Manager
 on:
   push:
     tags:
-      - "m*"
+      - "v*"
 # on:
 #   - push
 
@@ -32,10 +32,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies for Linux
-        if: ${{ runner.os == 'Linux' }}
-        run: |-
-          sudo apt install libssl-dev
+      # - name: Install dependencies for Linux
+      #   if: ${{ runner.os == 'Linux' }}
+      #   run: |-
+      #     sudo apt install libssl-dev
 
       - name: Install dependencies for Linux musl
         if: ${{ runner.os == 'Linux' && contains(matrix.rustc-target, 'musl') }}
@@ -48,8 +48,10 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
+          cache-dependency-path: web/package-lock.json
       
       - name: Build web pages
+        working-directory: web
         run: |-
           npm ci
           npm run build

@@ -4,16 +4,16 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::Response;
 use reqwest::StatusCode;
-use shared::utility::filename_ext::GetFileNamePart;
-use shared::utility::partial_read::PartialAsyncRead;
 use tokio::io::AsyncSeekExt;
 
+use crate::utility::filename_ext::GetFileNamePart;
+use crate::utility::partial_read::PartialAsyncRead;
 use crate::web::webstate::WebState;
 
 pub async fn api_public(State(state): State<WebState>, headers: HeaderMap, Path(path): Path<String>) -> Response {
     println!("+public: {}", path);
 
-    let path = state.app_path.public_dir.join(path);
+    let path = state.apppath.public_dir.join(path);
 
     if !path.is_file() {
         return Response::builder().status(404).body(Body::empty()).unwrap();

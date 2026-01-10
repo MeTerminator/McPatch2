@@ -6,7 +6,6 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use chrono::Local;
-use shared::utility::partial_read::PartialAsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncSeekExt;
 use tokio::io::AsyncWriteExt;
@@ -15,6 +14,7 @@ use tokio::net::TcpStream;
 
 use crate::app_path::AppPath;
 use crate::config::Config;
+use crate::utility::partial_read::PartialAsyncRead;
 use crate::utility::traffic_control::AsyncTrafficControl;
 
 pub async fn start_builtin_server(config: Config, app_path: AppPath) {
@@ -36,18 +36,16 @@ pub async fn start_builtin_server(config: Config, app_path: AppPath) {
 
     println!("private protocol is now listening on {}:{}", host, port);
 
-    tokio::spawn(async move {
-        let listener = TcpListener::bind(format!("{}:{}", host, port)).await.unwrap();
+    let listener = TcpListener::bind(format!("{}:{}", host, port)).await.unwrap();
 
-        loop {
-            let (stream, _peer_addr) = listener.accept().await.unwrap();
+    loop {
+        let (stream, _peer_addr) = listener.accept().await.unwrap();
 
-            let config = config.clone();
-            let app_path = app_path.clone();
+        let config = config.clone();
+        let app_path = app_path.clone();
 
-            tokio::spawn(async move { serve_loop(stream, config, app_path).await });
-        }
-    });
+        tokio::spawn(async move { serve_loop(stream, config, app_path).await });
+    }
 }
 
 async fn serve_loop(mut stream: TcpStream, config: Config, app_path: AppPath) {

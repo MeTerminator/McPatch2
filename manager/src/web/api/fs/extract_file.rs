@@ -8,8 +8,8 @@ use axum::extract::State;
 use axum::response::Response;
 use sha2::Digest;
 use sha2::Sha256;
-use shared::utility::filename_ext::GetFileNamePart;
 
+use crate::utility::filename_ext::GetFileNamePart;
 use crate::web::webstate::WebState;
 
 pub async fn api_extract_file(State(state): State<WebState>, Query(params): Query<HashMap<String, String>>) -> Response {
@@ -55,7 +55,7 @@ pub async fn api_extract_file(State(state): State<WebState>, Query(params): Quer
         return Response::builder().status(403).body(Body::new("signature is outdate".to_owned())).unwrap();
     }
 
-    let path = state.app_path.working_dir.join(path);
+    let path = state.apppath.working_dir.join(path);
 
     let metadata = tokio::fs::metadata(&path).await.unwrap();
 
