@@ -57,6 +57,9 @@ impl TarWriter {
         // 记录当前数据偏移位置
         let key = format!("{}_{}", path, version);
         let tar_offset = position - len - padding;
+        
+        // let key = format!("{}_{}", path, version);
+        // let tar_offset = 0;
 
         self.addresses.insert(key, tar_offset);
     }
@@ -91,6 +94,10 @@ impl TarWriter {
         header.set_size(file_content.len() as u64);
         self.builder.append_data(&mut header, "metadata.txt", std::io::Cursor::new(&file_content)).unwrap();
 
+        // if let Some(ff) = ext_meta_file {
+        //     std::fs::write(ff, file_content).unwrap();
+        // }
+        
         // 写入完毕
         self.builder.finish().unwrap();
         self.finished = true;

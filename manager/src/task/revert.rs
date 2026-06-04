@@ -10,6 +10,7 @@ use crate::diff::abstract_file::AbstractFile;
 use crate::diff::diff::Diff;
 use crate::diff::disk_file::DiskFile;
 use crate::diff::history_file::HistoryFile;
+use crate::utility::fix_file_mtime;
 use crate::web::log::Console;
 
 
@@ -32,6 +33,9 @@ pub fn task_revert(apppath: &AppPath, config: &Config, console: &Console) -> u8 
     let disk_file = DiskFile::new(apppath.workspace_dir.clone(), Weak::new());
     let diff = Diff::diff(&history, &disk_file, Some(exclude_rules));
     drop(disk_file);
+    
+    // 修复文件的 mtime
+    fix_file_mtime::fix_time_mtime(&diff, &apppath.workspace_dir);
 
     // 输出文件差异
     // if is_running_under_cargo() {

@@ -7,6 +7,7 @@ use crate::diff::abstract_file::AbstractFile;
 use crate::diff::diff::Diff;
 use crate::diff::disk_file::DiskFile;
 use crate::diff::history_file::HistoryFile;
+use crate::utility::fix_file_mtime;
 
 pub struct FileStatus {
     pub app_path: AppPath,
@@ -122,6 +123,9 @@ impl FileStatus {
             let disk_file = DiskFile::new(app_path.workspace_dir.clone(), Weak::new());
             let diff = Diff::diff(&disk_file, &history, Some(&exclude_rules));
 
+            // 修复文件的 mtime
+            fix_file_mtime::fix_time_mtime(&diff, &app_path.workspace_dir);
+            
             let mut status = Status::default();
             
             for f in diff.added_folders {

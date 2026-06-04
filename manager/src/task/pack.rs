@@ -13,6 +13,7 @@ use crate::diff::abstract_file::AbstractFile;
 use crate::diff::diff::Diff;
 use crate::diff::disk_file::DiskFile;
 use crate::diff::history_file::HistoryFile;
+use crate::utility::fix_file_mtime;
 use crate::web::log::Console;
 
 
@@ -60,6 +61,9 @@ pub fn task_pack(version_label: String, change_logs: String, apppath: &AppPath, 
         console.log_error("目前工作目录还没有任何文件修改");
         return 1;
     }
+    
+    // 修复文件的 mtime
+    fix_file_mtime::fix_time_mtime(&diff, &apppath.workspace_dir);
 
     console.log_info(format!("{:#?}", diff));
 
