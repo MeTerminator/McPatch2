@@ -6,6 +6,7 @@ use crate::core::data::index_file::IndexFile;
 use crate::diff::diff::Diff;
 use crate::diff::disk_file::DiskFile;
 use crate::diff::history_file::HistoryFile;
+use crate::utility::fix_file_mtime;
 use crate::web::log::Console;
 
 pub fn task_check(apppath: &AppPath, config: &Config, console: &Console) -> u8 {
@@ -27,6 +28,9 @@ pub fn task_check(apppath: &AppPath, config: &Config, console: &Console) -> u8 {
     let disk_file = DiskFile::new(apppath.workspace_dir.clone(), Weak::new());
     let diff = Diff::diff(&disk_file, &history, Some(&exclude_rules));
 
+    // 修复文件的 mtime
+    fix_file_mtime::fix_time_mtime(&diff, &apppath.workspace_dir);
+    
     // 输出文件差异
     console.log_info(format!("{:#?}", diff));
     console.log_info(format!("{}", diff));

@@ -1,16 +1,18 @@
 //! 目录差异对比
 
+use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fmt::Debug;
 use std::fmt::Write;
 use std::ops::Deref;
 use std::fmt::Display;
-use std::time::UNIX_EPOCH;
 
 use crate::core::data::version_meta::FileChange;
 use crate::diff::abstract_file::AbstractFile;
 use crate::diff::abstract_file::BorrowIntoIterator;
 use crate::core::rule_filter::RuleFilter;
+use crate::utility::unix_timestamp::UnixTimestampExt;
+use crate::utility::vec_ext::VecRemoveIf;
 
 const OP_FULL_ADDED_FOLDER: &str = "创建目录: ";
 const OP_FULL_ADDED_FILE: &str   = "更新文件: ";
@@ -32,6 +34,7 @@ pub struct Diff<N: AbstractFile, O: AbstractFile> {
     pub modified_files: Vec<N>,
     pub missing_folders: Vec<O>,
     pub missing_files: Vec<O>,
+    pub mtime_fix: Vec<(N, O)>,
     pub renamed_files: Vec<(O, N)>,
     excluding_filter: RuleFilter,
 }
@@ -45,6 +48,7 @@ impl<N: AbstractFile, O: AbstractFile> Diff<N, O> {
             modified_files: Vec::new(),
             missing_folders: Vec::new(),
             missing_files: Vec::new(),
+            mtime_fix: Vec::new(),
             renamed_files: Vec::new(),
             excluding_filter: match filter_rules {
                 Some(filter_rules) => RuleFilter::from_rules(filter_rules.iter()),
@@ -56,7 +60,7 @@ impl<N: AbstractFile, O: AbstractFile> Diff<N, O> {
         result.find_missing(newer, older);
         result.find_modified(newer, older);
         result.detect_file_movings(newer, older);
-
+        
         result
     }
 
@@ -156,8 +160,14 @@ impl<N: AbstractFile, O: AbstractFile> Diff<N, O> {
                         (false, true) => (),
 
                         // 两边都是文件，则对比文件，如果不同，视为修改过的文件
-                        (false, false) => if !self.compare_file(&n, &o) {
-                            self.mark_as_modified(&n)
+                        (false, false) => {
+                            if !Self::compare_file_mtime(&n, &o) {
+                                if !Self::compare_file_hash(&n, &o) {
+                                    self.mark_as_modified(&n)
+                                } else {
+                                    self.mtime_fix.push((n.to_owned(), o.to_owned()));
+                                }
+                            }
                         },
                     }
                 },
@@ -209,12 +219,17 @@ impl<N: AbstractFile, O: AbstractFile> Diff<N, O> {
         self.modified_files.push(file.to_owned());
     }
     
-    /// 比较两个文件是否相同
-    fn compare_file(&self, a: &N, b: &O) -> bool {
-        let ta = a.modified().duration_since(UNIX_EPOCH).unwrap().as_secs();
-        let tb = b.modified().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    /// 比较两个文件的修改时间
+    fn compare_file_mtime(a: &N, b: &O) -> bool {
+        let ta = a.modified().as_unix_seconds();
+        let tb = b.modified().as_unix_seconds();
 
-        ta == tb || a.hash().deref() == b.hash().deref()
+        ta == tb
+    }
+    
+    /// 比较两个文件的校验
+    fn compare_file_hash(a: &N, b: &O) -> bool {
+        a.hash().deref() == b.hash().deref()
     }
 
     /// 检查一个文件要不要被忽略
@@ -223,58 +238,72 @@ impl<N: AbstractFile, O: AbstractFile> Diff<N, O> {
     }
     
     /// 检测文件移动操作
-    fn detect_file_movings(&mut self, newer: &N, older: &O) {
-        // 首先收集所有可能的移动操作
-        for updated in &self.added_files {
-            for deleted in &self.missing_files {
-                let n = newer.find(updated.path().deref()).unwrap();
-                let o = older.find(deleted.path().deref()).unwrap();
-
-                if n.modified() == o.modified() {
-                    continue;
-                }
-
-                if n.hash().deref() == o.hash().deref() {
-                    self.renamed_files.push((o, n));
-                }
-            }
-
-            // println!("{}", updated.path().deref());
-        }
-
-        // 如果有多个同名但不同路径的文件移动，就将它们退回复制操作，而非移动
-        let mut ambiguous = Vec::<String>::new();
-        let mut scanned = Vec::<String>::new();
-
-        for moving in &self.renamed_files {
-            if scanned.contains(&moving.0.path().to_owned()) {
-                if !ambiguous.contains(&moving.0.path().to_owned()) {
-                    ambiguous.push(moving.0.path().to_owned());
-                }
-            } else {
-                scanned.push(moving.0.path().to_owned());
+    fn detect_file_movings(&mut self, _newer: &N, _older: &O) {
+        let mut old_hashes = HashMap::<String, Vec<O>>::new();
+        let mut new_hashes = HashMap::<String, Vec<N>>::new();
+        
+        // 建立hash和路径之间的映射
+        for missing_file in &self.missing_files {
+            let list = old_hashes.get_mut(missing_file.hash().deref());
+            
+            match list {
+                Some(hashes) => {
+                    hashes.push(missing_file.to_owned());
+                },
+                None => {
+                    let mut list = Vec::<O>::new();
+                    list.push(missing_file.to_owned());
+                    old_hashes.insert(missing_file.hash().to_owned(), list);
+                },
             }
         }
-
-        for a in ambiguous {
-            for i in (0..self.renamed_files.len()).rev() {
-                if self.renamed_files[i].0.path().deref() == &a {
-                    self.renamed_files.remove(i);
-                }
+        
+        for added_file in &self.added_files {
+            let list = new_hashes.get_mut(added_file.hash().deref());
+            
+            match list {
+                Some(hashes) => {
+                    hashes.push(added_file.to_owned());
+                },
+                None => {
+                    let mut list = Vec::<N>::new();
+                    list.push(added_file.to_owned());
+                    new_hashes.insert(added_file.hash().to_owned(), list);
+                },
             }
         }
-
-        // 将复制操作简化为移动操作
-        for moving in &self.renamed_files {
-            for i in (0..self.added_files.len()).rev() {
-                if self.added_files[i].path().deref() == moving.1.path().deref() {
-                    self.added_files.remove(i);
-                }
-            }
-
-            for i in (0..self.missing_files.len()).rev() {
-                if self.missing_files[i].path().deref() == moving.0.path().deref() {
-                    self.missing_files.remove(i);
+        
+        // for missing_file in &self.missing_files {
+        //     println!("missing_file: {} ({})", missing_file.path().deref(), missing_file.hash().deref());
+        // }
+        
+        // for added_file in &self.added_files {
+        //     println!("added_file: {} ({})", added_file.path().deref(), added_file.hash().deref());
+        // }
+        
+        // for e in &old_hashes {
+        //     for path in e.1 {
+        //         println!("old_hashes: {} => {} ({})", e.0, path.path().deref(), e.1.len());
+        //     }
+        // }
+        
+        // for e in &new_hashes {
+        //     for path in e.1 {
+        //         println!("new_hashes: {} => {} ({})", e.0, path.path().deref(), e.1.len());
+        //     }
+        // }
+        
+        // 寻找一对一的hash，这些文件就是发生了移动的文件
+        for (hash, olds) in old_hashes {
+            if let Some(news) = new_hashes.get(&hash) {
+                if olds.len() == 1 && news.len() == 1 {
+                    let o = olds.get(0).unwrap();
+                    let n = news.get(0).unwrap();
+                    
+                    self.renamed_files.push((o.to_owned(), n.to_owned()));
+                    
+                    self.missing_files.remove_if(|e| e.path().deref() == o.path().deref());
+                    self.added_files.remove_if(|e| e.path().deref() == n.path().deref());
                 }
             }
         }

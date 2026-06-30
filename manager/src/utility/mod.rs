@@ -5,6 +5,8 @@ pub mod io_utils;
 pub mod partial_read;
 pub mod filename_ext;
 pub mod vec_ext;
+pub mod unix_timestamp;
+pub mod fix_file_mtime;
 
 /// 判断是否在cargo环境中运行
 pub fn is_running_under_cargo() -> bool {
